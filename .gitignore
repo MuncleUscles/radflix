@@ -6,3 +6,9 @@ node_modules/
 
 # typescript
 build/
+
+# tarball
+.tgz
+
+# dotenv
+.env
