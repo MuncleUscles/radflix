@@ -12,12 +12,12 @@ const config: webpack.Configuration = {
       }
     ]
   },
-  resolve: {
-    extensions: ['.ts', '.js']
-  },
   output: {
     filename: 'bundle.js',
     path: path.resolve(__dirname, 'build')
+  },
+  resolve: {
+    extensions: ['.ts', '.js']
   },
   target: 'node'
 };
