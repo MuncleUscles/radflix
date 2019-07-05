@@ -1,15 +1,24 @@
 import express from 'express';
-import { connectDb } from './models';
+import models, { connectDb } from './models';
+import uuidv4 from 'uuid';
+import {RadixSerializer, RadixAtom, RadixMessageParticle, RadixAccount, RadixKeyStore, RadixIdentityManager, RadixIdentity, RadixTransactionBuilder, RRI, radixUniverse, RadixUniverse} from 'radixdlt'
+import fs from 'fs-extra'
+import BN from 'bn.js'
 
 const app: express.Application = express();
 const port: number = Number(process.env.PORT) || 3001;
 
+let identity: RadixIdentity
 
-// Store and recover account
+radixUniverse.bootstrap(RadixUniverse.LOCAL)
 
+connectDb()
+.then(() => {
+  return loadIdentity()
+}).then(_identity => {
+  identity = _identity
+  subscribeForPurchases()
 
-
-connectDb().then(() => {
   app.listen(port, (err: Error) => {
     if (err) {
       console.error(err);
@@ -20,29 +29,235 @@ connectDb().then(() => {
 })
 
 
+// Store and recover account
+const identityManager = new RadixIdentityManager()
+const keystorePath = 'keystore.json'
+const keystorePassword = `don't tell anyone :P`
+async function loadIdentity() {
+  if (fs.existsSync(keystorePath)) {
+    // Load account
+    const contents = await fs.readJSON(keystorePath)  
+    const address = await RadixKeyStore.decryptKey(contents, keystorePassword)
+
+    const identity = identityManager.addSimpleIdentity(address)
+    await identity.account.openNodeConnection()
+
+    console.log('Loaded identity')
+
+    return identity
+  } else {
+    const identity = identityManager.generateSimpleIdentity()
+    const contents = await RadixKeyStore.encryptKey(identity.address, keystorePassword)
+    await fs.writeJSON(keystorePath, contents)
+
+    console.log('Generated new identity')
+
+    return identity
+  }
+}
+
+
+
+
+const accounts: {[address: string]: RadixAccount} = {}
+const getAccount = async function(address: string) {
+  let account: RadixAccount
+  if (address in accounts) {
+    account = accounts[address]
+  } else {
+    account = RadixAccount.fromAddress(address)
+    accounts[address] = account
+     await account.openNodeConnection()
+  }
+
+  // Wait for the account to be synced
+  await account.isSynced()
+    .filter(val => val)
+    .toPromise()
+
+  return account
+}
+
+
+
+
+
 app.get('/', (req, res) => res.send(`Hi`))
 
 
 // Routes
-
 // Access Reqeust
-  // Create challenge seed
-  // store in DB - need a db
-  // send to user
+  app.get('/request-access', async (req, res) => {
+    const id = uuidv4()
+    const request = new models.AccessRequest({
+      id,
+      consumed: false,
+    })
+
+    await request.save()
+
+    res.send(id)
+  })
 
 // Access a resource (signed(address, challenge), tokenId)
-  // Verify signature
-  // Verify ownership
-  // Return resource
+  app.post('/movie', async (req, res) => {
+    const serializedAtom = req.param('atom')
+    const movieTokenUri = req.param('movieTokenUri')
 
-// Strech goal - Buy
-  // When get XRD with reference
-  // Send a movie token
+    const atom = RadixSerializer.fromJSON(serializedAtom) as RadixAtom
+    const particle = atom.getFirstParticleOfType(RadixMessageParticle)
+    const from = particle.from
+    const data = particle.getData().asJSON()
+
+    // Check signature
+    if (!from.verify(atom.getHash(), atom.signatures[from.getUID().toString()])) {
+      res.status(400).send('Signature verification failed')
+      throw new Error('Signature verification failed')
+    }
+
+    const query = {
+      id: data.challenge
+    }
+
+    // Check challenge
+    const document = await models.AccessRequest.findOne(query).exec()
+    if (!document) {
+      res.status(400).send('Invalid challenge')
+      throw new Error('Invalid challenge')
+    }
+
+    document.set('consumed', true)
+    await document.save()
+
+
+    // Check ownership
+    const account = await getAccount(from.toString())
+    const balance = account.transferSystem.balance
+
+    // If don't have any movie tokens
+    if(!(movieTokenUri in balance) || balance[movieTokenUri].ltn(1)) {
+      throw new Error(`Don't own the movie`)
+    }
+
+    const movie = await models.Movie.findOne({
+      tokenUri: movieTokenUri
+    }).exec()
+
+    if(!movie) {
+      throw new Error(`Movie doesn't exist`)
+    }
+
+    res.send(movie.get('contentUrl'))
+  })
+
+
+
 
 // Admin
-  // add movie(symbol, data)
-    // create token
-    // store in db
-  // add movie viewer(address)
-    // mint new token
-    // send to user
+  // Add a movie
+  app.post('/admin/movie', async (req, res) => {
+    // Create token
+    const name = req.param('name')
+    const symbol = req.param('symbol')
+    const description = req.param('description')
+    const posterUrl = req.param('posterUrl')
+    const contentUrl = req.param('contentUrl')
+    const price = req.param('price')
+
+    const uri = new RRI(identity.address, symbol)
+
+    try {
+      new RadixTransactionBuilder().createTokenMultiIssuance(
+        identity.account,
+        name,
+        symbol,
+        description,
+        new BN(10).pow(new BN(18)),
+        1,
+        posterUrl,
+      ).signAndSubmit(identity)
+      .subscribe({
+        next: status => {
+          console.log(status)
+        },
+        complete:  async () => {
+          // Create DB entry
+          const movie = new models.Movie({
+            tokenUri: uri,
+            name,
+            description,
+            price,
+            posterUrl,
+            contentUrl,
+          })
+
+          await movie.save()
+
+          res.send(uri)
+        }, error: (e) => {
+          console.log(e)
+          res.status(400).send(e)
+        }
+      })
+    } catch(e) {
+      res.status(400).send(e.message)
+    }
+  })
+
+
+// Buying a movie
+function subscribeForPurchases() {
+  identity.account.transferSystem.getAllTransactions().subscribe(async (txUpdate) => {
+    if (!txUpdate.transaction) {
+      return
+    }
+
+    if (!(radixUniverse.nativeToken.toString() in txUpdate.transaction.balance)) {
+      return
+    }
+
+    models.Purchase.findOne({aid: txUpdate.aid.toString()}, async (err, res) => {
+      if(res) {
+        //Already processed
+        return
+      }
+      if (!txUpdate.transaction) {
+        return
+      }
+
+      const tokenUri = txUpdate.transaction.message
+      const purchaser = Object.values(txUpdate.transaction.participants)[0]
+      const movie = await models.Movie.findOne({
+        tokenUri
+      }).exec()
+
+      if (!movie) {
+        throw new Error(`Movie doesn't exist`)
+        // TODO: retrun money
+      }
+
+      const moneySent = txUpdate.transaction.tokenUnitsBalance[radixUniverse.nativeToken.toString()]
+      if (moneySent.lessThan(movie.get('price'))) {
+        throw new Error('Insufficent patment')
+        // TODO: return money
+      }
+
+      // Mint a new movie token
+      RadixTransactionBuilder.createMintAtom(identity.account, tokenUri, 1)
+        .signAndSubmit(identity)
+        .subscribe({complete: () => {
+          // Send the movie token
+          RadixTransactionBuilder.createTransferAtom(identity.account, purchaser, tokenUri, 1)
+            .signAndSubmit(identity)
+            .subscribe({
+              complete: () => {
+                console.log('Movie was purchased')
+                new models.Purchase({
+                  aid: txUpdate.aid
+                }).save()
+              }
+            })
+        }})
+    })
+  })
+}
