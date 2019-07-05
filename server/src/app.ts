@@ -10,3 +10,5 @@ app.listen(port, (err: Error) => {
     console.log('NODE_ENV =', process.env.NODE_ENV);
   }
 });
+
+app.get('/', (req, res) => res.send(`Hi`))

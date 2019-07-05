@@ -10,7 +10,8 @@
   },
   "license": "MIT",
   "dependencies": {
-    "express": "^4.16.3"
+    "express": "^4.16.3",
+    "radixdlt": "git://github.com/radixdlt/radixdlt-js.git#rc/betanet"
   },
   "devDependencies": {
     "@types/express": "^4.16.0",
