@@ -5,6 +5,10 @@ const app: express.Application = express();
 const port: number = Number(process.env.PORT) || 3001;
 
 
+// Store and recover account
+
+
+
 connectDb().then(() => {
   app.listen(port, (err: Error) => {
     if (err) {
@@ -21,15 +25,24 @@ app.get('/', (req, res) => res.send(`Hi`))
 
 // Routes
 
-// Auth
+// Access Reqeust
   // Create challenge seed
   // store in DB - need a db
   // send to user
 
-// Auth confirm - maybe on ledger
-  // Receive signed challenge + address
-  // Load account
+// Access a resource (signed(address, challenge), tokenId)
+  // Verify signature
+  // Verify ownership
+  // Return resource
 
-// List movies(challenge)
+// Strech goal - Buy
+  // When get XRD with reference
+  // Send a movie token
 
-// Stream movie(challenge, movie id)
+// Admin
+  // add movie(symbol, data)
+    // create token
+    // store in db
+  // add movie viewer(address)
+    // mint new token
+    // send to user

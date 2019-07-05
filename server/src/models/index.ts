@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-import User from './user';
+import AccessRequest from './accessRequest';
 import Movie from './movie';
 
 
@@ -9,7 +9,7 @@ const connectDb = () => {
   return mongoose.connect( dbUrl );
 };
 
-const models = { User, Movie };
+const models = { AccessRequest, Movie };
 
 export { connectDb };
 
