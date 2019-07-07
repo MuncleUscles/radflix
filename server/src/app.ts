@@ -4,9 +4,13 @@ import uuidv4 from 'uuid';
 import {RadixSerializer, RadixAtom, RadixMessageParticle, RadixAccount, RadixKeyStore, RadixIdentityManager, RadixIdentity, RadixTransactionBuilder, RRI, radixUniverse, RadixUniverse} from 'radixdlt'
 import fs from 'fs-extra'
 import BN from 'bn.js'
+import cors from 'cors'
+import bodyParser from 'body-parser'
 
 const app: express.Application = express();
 const port: number = Number(process.env.PORT) || 3001;
+app.use(cors())
+app.use(bodyParser.json())
 
 let identity: RadixIdentity
 
@@ -67,12 +71,18 @@ const getAccount = async function(address: string) {
   } else {
     account = RadixAccount.fromAddress(address)
     accounts[address] = account
-     await account.openNodeConnection()
+    await account.openNodeConnection()
   }
+
+  console.log('got account')
 
   // Wait for the account to be synced
   await account.isSynced()
-    .filter(val => val)
+    .filter(val => {
+      console.log('synced', val)
+      return val
+    })
+    .take(1)
     .toPromise()
 
   return account
@@ -86,6 +96,19 @@ app.get('/', (req, res) => res.send(`Hi`))
 
 
 // Routes
+// Access Reqeust
+app.get('/movies', async (req, res) => {
+  models.Movie.find({}, '-contentUrl', (err, movies) => {
+    if (err) {
+      res.status(400).send(err)
+      return
+    }
+
+    res.send(movies)
+  })
+})
+
+
 // Access Reqeust
   app.get('/request-access', async (req, res) => {
     const id = uuidv4()
@@ -101,8 +124,9 @@ app.get('/', (req, res) => res.send(`Hi`))
 
 // Access a resource (signed(address, challenge), tokenId)
   app.post('/movie', async (req, res) => {
-    const serializedAtom = req.param('atom')
-    const movieTokenUri = req.param('movieTokenUri')
+    console.log('Requesting access to movie')
+    const serializedAtom = req.body.atom
+    const movieTokenUri = req.body.movieTokenUri
 
     const atom = RadixSerializer.fromJSON(serializedAtom) as RadixAtom
     const particle = atom.getFirstParticleOfType(RadixMessageParticle)
@@ -115,16 +139,20 @@ app.get('/', (req, res) => res.send(`Hi`))
       throw new Error('Signature verification failed')
     }
 
+    console.log('Signature ok')
+
     const query = {
       id: data.challenge
     }
 
     // Check challenge
     const document = await models.AccessRequest.findOne(query).exec()
-    if (!document) {
+    if (!document || document.get('consumed')) {
       res.status(400).send('Invalid challenge')
       throw new Error('Invalid challenge')
     }
+
+    console.log('challenge ok')
 
     document.set('consumed', true)
     await document.save()
@@ -132,22 +160,28 @@ app.get('/', (req, res) => res.send(`Hi`))
 
     // Check ownership
     const account = await getAccount(from.toString())
+    console.log('got synced account')
     const balance = account.transferSystem.balance
+    console.log(balance)
 
     // If don't have any movie tokens
     if(!(movieTokenUri in balance) || balance[movieTokenUri].ltn(1)) {
+      res.status(400).send(`Don't own the movie`)
       throw new Error(`Don't own the movie`)
     }
+
+    console.log('movie owned')
 
     const movie = await models.Movie.findOne({
       tokenUri: movieTokenUri
     }).exec()
 
     if(!movie) {
+      res.status(400).send(`Movie doesn't exist`)
       throw new Error(`Movie doesn't exist`)
     }
 
-    res.send(movie.get('contentUrl'))
+    res.send(movie)
   })
 
 
@@ -261,3 +295,28 @@ function subscribeForPurchases() {
     })
   })
 }
+
+
+  // Add a movie
+  app.post('/admin/buy-movie', (req, res) => {
+    // Create token
+    const tokenUri = req.body.tokenUri
+    const address = req.body.address
+
+    const purchaser = RadixAccount.fromAddress(address)
+
+    // Mint a new movie token
+    RadixTransactionBuilder.createMintAtom(identity.account, tokenUri, 1)
+    .signAndSubmit(identity)
+    .subscribe({complete: () => {
+      // Send the movie token
+      RadixTransactionBuilder.createTransferAtom(identity.account, purchaser, tokenUri, 1)
+        .signAndSubmit(identity)
+        .subscribe({
+          complete: () => {
+            console.log('Movie was purchased')
+            res.send('Done')
+          }
+        })
+    }})
+  })

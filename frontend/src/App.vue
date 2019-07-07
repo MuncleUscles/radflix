@@ -1,12 +1,31 @@
 <template>
   <div id="app">
-    <div id="nav">
+    <!-- <div id="nav">
       <router-link to="/">Home</router-link> |
       <router-link to="/about">About</router-link>
-    </div>
+    </div> -->
     <router-view/>
   </div>
 </template>
+
+<script lang="ts">
+import Vue from 'vue';
+import {radixUniverse, RadixUniverse, RadixIdentityManager, RadixRemoteIdentity} from 'radixdlt'
+import { mapState } from 'vuex';
+
+export default Vue.extend({
+  name: 'movie-list',
+  computed: mapState(['identity']),
+  created() {
+    radixUniverse.bootstrap(RadixUniverse.LOCAL)
+
+    RadixRemoteIdentity.createNew('Radflix', 'Watch movies, the Radix way').then((identity) => {
+      identity.account.openNodeConnection()
+      this.$store.commit('setIdentity', identity)
+    })
+  },
+});
+</script>
 
 <style lang="scss">
 #app {

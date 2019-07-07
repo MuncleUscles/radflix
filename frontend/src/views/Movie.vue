@@ -1,20 +1,63 @@
 <template>
-  <div class="home">
-    <img alt="Movie cover" src="https://m.media-amazon.com/images/M/MV5BMjMxNjY2MDU1OV5BMl5BanBnXkFtZTgwNzY1MTUwNTM@._V1_UY209_CR0,0,140,209_AL_.jpg">
-    <h1>Avengers: Infinity War (2018)</h1>
-    <h2>Rating ⭐⭐⭐⭐</h2>
-    
-    <img src="https://media.giphy.com/media/qC5abwZ54KV6U/giphy.gif">
-    
+  <div v-if="!loaded">
+    Loading...
+  </div>
+  <div v-else-if="error">
+    {{error}}
+  </div>
+  <div v-else class="home">
+    <h1>{{movie.name}}</h1>
+    <video :src="movie.contentUrl" controls autoplay></video>
   </div>
 </template>
 
 <script lang="ts">
 import Vue from 'vue';
+import { mapState } from 'vuex';
+import { RadixTransactionBuilder, RadixSerializer } from 'radixdlt';
 
 export default Vue.extend({
-  name: 'Movie',
-  components: {
+  data() {
+    return {
+      loaded: false,
+      error: '',
+      movie: null,
+    }
   },
+  name: 'movie',
+  computed: mapState(['identity']),
+  created() {
+  },
+  mounted() {
+    this.$http.get('http://localhost:3001/request-access').then((response) => {
+      const challenge = response.body
+
+      // Construct and sign the atom
+      const data = {challenge}
+
+      const atom = RadixTransactionBuilder.createPayloadAtom(
+        this.identity.account, 
+        [this.identity.account], 
+        'radflix', 
+        JSON.stringify(data), 
+        false).buildAtom()
+      this.identity.signAtom(atom).then((signedAtom) => {
+        this.$http.post('http://localhost:3001/movie', {
+          movieTokenUri: this.$route.params.id,
+          atom: atom.toJSON(),
+        }).then((response) => {
+          this.loaded = true
+          this.movie = response.body
+        }, (error) => {
+          console.log(error)
+          this.loaded = true
+          this.error = error.body
+        })
+      })
+    })
+  },
+  methods: {
+    
+  }
 });
 </script>
