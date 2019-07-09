@@ -17,11 +17,13 @@
         <td>{{movie.name}}</td>
         <td>{{movie.description}}</td>
         <td v-if="movie.tokenUri in myMovies">
-          <router-link :to="{name: 'Movie', params: {id: movie.tokenUri}}">Watch</router-link>
+          <router-link :to="{name: 'Movie', params: {id: movie.tokenUri}}">
+            <button class="button"> Watch</button>
+          </router-link>
         </td>
         <td v-else>
-          <button @click="buy(movie.tokenUri)">Buy</button>
-          <div><router-link :to="{name: 'Movie', params: {id: movie.tokenUri}}">Try watching</router-link></div>
+          <button @click="buy(movie.tokenUri)" class="button">Buy</button>
+          <div class="is-size-7"><router-link :to="{name: 'Movie', params: {id: movie.tokenUri}}">Try watching</router-link></div>
         </td>
       </tr>
     </tbody>

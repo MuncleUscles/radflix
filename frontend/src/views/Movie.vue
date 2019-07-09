@@ -7,7 +7,21 @@
   </div>
   <div v-else class="home">
     <h1>{{movie.name}}</h1>
-    <video :src="movie.contentUrl" controls autoplay loop></video>
+
+    <video v-if="movie.contentUrl.includes('.mp4')" 
+      :src="movie.contentUrl" controls autoplay loop>
+    </video>
+    <div v-else class="videoWrapper">
+      <iframe 
+        width="560" 
+        height="315" 
+        :src="movie.contentUrl + '?&autoplay=1'" 
+        frameborder="0" 
+        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" 
+        allowfullscreen>
+      </iframe>
+    </div>
+
   </div>
 </template>
 
@@ -70,3 +84,19 @@ export default Vue.extend({
   }
 });
 </script>
+
+<style>
+.videoWrapper {
+	position: relative;
+	padding-bottom: 56.25%; /* 16:9 */
+	padding-top: 25px;
+	height: 0;
+}
+.videoWrapper iframe {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+}
+</style>
