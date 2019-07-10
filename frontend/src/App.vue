@@ -17,7 +17,7 @@ export default Vue.extend({
   name: 'movie-list',
   computed: mapState(['identity']),
   created() {
-    radixUniverse.bootstrap(RadixUniverse.LOCAL)
+    radixUniverse.bootstrap(RadixUniverse.LOCALHOST_SINGLENODE)
 
     RadixRemoteIdentity.createNew('Radflix', 'Watch movies, the Radix way').then((identity) => {
       identity.account.openNodeConnection()

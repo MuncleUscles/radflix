@@ -14,7 +14,7 @@ app.use(bodyParser.json())
 
 let identity: RadixIdentity
 
-radixUniverse.bootstrap(RadixUniverse.LOCAL)
+radixUniverse.bootstrap(RadixUniverse.LOCALHOST_SINGLENODE)
 
 connectDb()
 .then(() => {
@@ -196,7 +196,7 @@ app.get('/movies', async (req, res) => {
     const description = req.param('description')
     const posterUrl = req.param('posterUrl')
     const contentUrl = req.param('contentUrl')
-    const price = req.param('price')
+    const price = req.param('price') ? parseFloat(req.param('price')) : 1
 
     const uri = new RRI(identity.address, symbol)
 
@@ -206,7 +206,7 @@ app.get('/movies', async (req, res) => {
         name,
         symbol,
         description,
-        new BN(10).pow(new BN(18)),
+        1,
         1,
         posterUrl,
       ).signAndSubmit(identity)
@@ -217,7 +217,7 @@ app.get('/movies', async (req, res) => {
         complete:  async () => {
           // Create DB entry
           const movie = new models.Movie({
-            tokenUri: uri,
+            tokenUri: uri.toString(),
             name,
             description,
             price,

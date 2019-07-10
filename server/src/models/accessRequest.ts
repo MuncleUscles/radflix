@@ -1,10 +1,16 @@
 import mongoose from 'mongoose'
 
+export type AccessRequestModel = mongoose.Document & {
+    id: string; 
+    consumed: boolean;
+};
+  
+
 const accessRequest = new mongoose.Schema({
     id: String,
     consumed: Boolean,
 });
 
-const AccessRequest = mongoose.model('AccessRequest', accessRequest);
+const AccessRequest = mongoose.model<AccessRequestModel>('AccessRequest', accessRequest);
 
 export default AccessRequest;
