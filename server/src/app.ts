@@ -51,6 +51,7 @@ async function loadIdentity() {
     return identity
   } else {
     const identity = identityManager.generateSimpleIdentity()
+    await identity.account.openNodeConnection()
     const contents = await RadixKeyStore.encryptKey(identity.address, keystorePassword)
     await fs.writeJSON(keystorePath, contents)
 
